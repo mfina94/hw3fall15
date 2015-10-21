@@ -20,11 +20,15 @@ class OracleOfBacon
   validate :from_does_not_equal_to
 
   def from_does_not_equal_to
-    # YOUR CODE HERE
+    if @from == @to
+      self.errors.add(:from, 'cannot be the same as To')
+    end
   end
 
   def initialize(api_key='')
-    # your code here
+    @api_key = api_key
+    @to = 'Kevin Bacon'
+    @from ='Kevin Bacon'
   end
 
   def find_connections
@@ -34,16 +38,18 @@ class OracleOfBacon
     rescue Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, EOFError,
       Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError,
       Net::ProtocolError => e
+      raise OracleOfBacon::NetworkError
       # convert all of these into a generic OracleOfBacon::NetworkError,
       #  but keep the original error message
       # your code here
     end
-    # your code here: create the OracleOfBacon::Response object
+    @response = Response.new(xml)
   end
 
   def make_uri_from_arguments
     # your code here: set the @uri attribute to properly-escaped URI
     #   constructed from the @from, @to, @api_key arguments
+    @uri = 'http://oracleofbacon.org/cgi-bin/xml?p='+@api_key.to_s+'&b='+CGI.escape(@from)+'&a='+CGI.escape(@to)
   end
       
   class Response
@@ -59,9 +65,42 @@ class OracleOfBacon
     def parse_response
       if ! @doc.xpath('/error').empty?
         parse_error_response
+      elsif !@doc.xpath('/spellcheck').empty?
+        parse_spellcheck_response
+      elsif !@doc.xpath('/link').empty?
+        parse_graph_response
+      else
+        parse_unknown_response
       # your code here: 'elsif' clauses to handle other responses
       # for responses not matching the 3 basic types, the Response
       # object should have type 'unknown' and data 'unknown response'         
+      end
+    end
+    
+    def parse_graph_response
+      @type = :graph
+      actor = Array.new()
+      movie = Array.new()
+      @doc.xpath('//actor').each do |node|
+        actor.push(node.text)
+      end
+      @doc.xpath('//movie').each do |node|
+        movie.push(node.text)
+      end
+      @data = Array.new
+      @data = actor.zip(movie)
+      @data = @data.flatten
+      @data = @data.compact
+    end
+    def parse_unknown_response
+      @type = :unknown
+      @data = 'unknown response'
+    end
+    def parse_spellcheck_response
+      @type = :spellcheck
+      @data = Array.new
+      @doc.xpath('//match').each do |node|
+        @data.push(node.text)
       end
     end
     def parse_error_response
@@ -70,4 +109,3 @@ class OracleOfBacon
     end
   end
 end
-
